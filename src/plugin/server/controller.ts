@@ -10,14 +10,53 @@ import { Strategy as LocalStrategy } from 'passport-local';
 import { randomBytes } from 'crypto';
 import { INTERNAL_LOGIN_ENPOINT, tryResolveFilePath } from './pathResolver';
 import { contentResolver } from './contentResolver';
+import { TFile, TFolder } from 'obsidian';
+
+interface FileTreeItem {
+  name: string;
+  path: string;
+  type: 'file' | 'folder';
+  children?: FileTreeItem[];
+}
 
 export class ServerController {
   app: express.Application;
   server?: Server<typeof IncomingMessage, typeof ServerResponse>;
   markdownRenderer: CustomMarkdownRenderer;
 
+  private buildFileTree(folder: TFolder): FileTreeItem[] {
+    const items: FileTreeItem[] = [];
+
+    folder.children.forEach((item) => {
+      if (item instanceof TFolder) {
+        items.push({
+          name: item.name,
+          path: item.path,
+          type: 'folder',
+          children: this.buildFileTree(item)
+        });
+      } else if (item instanceof TFile && item.extension === 'md') {
+        items.push({
+          name: item.basename,
+          path: item.path,
+          type: 'file'
+        });
+      }
+    });
+
+    return items.sort((a, b) => {
+      if (a.type === b.type) {
+        return a.name.localeCompare(b.name);
+      }
+      return a.type === 'folder' ? -1 : 1;
+    });
+  }
+
   constructor(private plugin: HtmlServerPlugin) {
     this.app = express();
+
+    // Добавляем обработку JSON
+    this.app.use(express.json());
 
     this.app.use(expressSession({ secret: randomBytes(16).toString('base64') }));
     this.app.use(passport.initialize());
@@ -33,9 +72,11 @@ export class ServerController {
 
     this.markdownRenderer = new ObsidianMarkdownRenderer(plugin, plugin.app);
 
+    // Настройка аутентификации
     passport.use(
       new LocalStrategy((username, password, done) => {
-        if (username === this.plugin.settings.simpleAuthUsername && password === this.plugin.settings.simpleAuthPassword) {
+        if (username === this.plugin.settings.simpleAuthUsername &&
+          password === this.plugin.settings.simpleAuthPassword) {
           done(null, { username });
           return;
         }
@@ -43,12 +84,28 @@ export class ServerController {
       })
     );
 
-    this.app.use(express.urlencoded());
+    this.app.use(express.urlencoded({ extended: true }));
+
+    // Обработчик для получения списка файлов
+    this.app.get('/api/files', this.authenticateIfNeeded, async (req, res) => {
+      try {
+        console.log('Получен запрос на /api/files');
+        const vault = this.plugin.app.vault;
+        const rootFolder = vault.getRoot();
+        const fileTree = this.buildFileTree(rootFolder);
+        console.log('Отправка дерева файлов:', JSON.stringify(fileTree, null, 2));
+        res.json(fileTree);
+      } catch (error) {
+        console.error('Error getting file tree:', error);
+        res.status(500).json({ error: 'Failed to get file tree' });
+      }
+    });
 
     this.app.post('/login', passport.authenticate('local', {}), (req, res) => {
       res.redirect(req.body.redirectUrl || '/');
     });
 
+    // Основной обработчик для файлов должен быть последним
     this.app.use('/', this.authenticateIfNeeded, async (req, res) => {
       let path = decodeURI(req.path);
       if (!path || path === '/') {
@@ -56,8 +113,7 @@ export class ServerController {
       }
 
       const resolveFromPath = getResolveFromPath(req);
-
-      const resolvedPath = tryResolveFilePath(path, resolveFromPath, app);
+      const resolvedPath = tryResolveFilePath(path, resolveFromPath, this.plugin.app);
 
       if (!resolvedPath) {
         res.status(404).write(`Couldn't resolve file at path '${req.path}'`);
@@ -84,6 +140,7 @@ export class ServerController {
       res.end();
     });
   }
+
 
   async start() {
     if (!this.server || !this.server.listening) {
@@ -151,6 +208,8 @@ export class ServerController {
 
     res.send(content?.payload);
   };
+
+
 }
 
 const getResolveFromPath = (req: Request) => {
