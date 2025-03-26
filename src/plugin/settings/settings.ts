@@ -37,7 +37,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     }
 
     .file-explorer {
-      width: 250px;
+      width: 350px;
       height: 100%;
       overflow-y: auto;
       border-right: 1px solid black;
@@ -60,7 +60,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 
     .file-tree ul {
       list-style: none;
-      padding-left: 20px;
+      padding-left: 5px;
       margin: 0;
     }
 
@@ -180,16 +180,18 @@ export const DEFAULT_SETTINGS: PluginSettings = {
       
       if (item.type === 'folder') {
         // Для папок создаем div-контейнер
-        const folderDiv = document.createElement('div');
+        const folderDiv = document.createElement('details');
         folderDiv.className = 'file-item folder';
         folderDiv.innerHTML = \`
-          <span class="folder-name">📁 \${item.name}</span>
+          <summary>📁 \${item.name}</summary>
         \`;
         li.appendChild(folderDiv);
         
         // Добавляем вложенные файлы/папки
         if (item.children && item.children.length > 0) {
-          li.appendChild(createFileTree(item.children));
+          const ul_c = createFileTree(item.children);
+          folderDiv.appendChild(ul_c);
+          li.appendChild(folderDiv);
         }
       } else {
         // Для файлов создаем ссылку на весь элемент
