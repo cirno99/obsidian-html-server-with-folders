@@ -183,7 +183,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
         const folderDiv = document.createElement('details');
         folderDiv.className = 'file-item folder';
         folderDiv.innerHTML = \`
-          <summary>📁 \${item.name}</summary>
+          <summary>\${item.name}</summary>
         \`;
         li.appendChild(folderDiv);
         
@@ -199,7 +199,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
         fileLink.href = \`/\${item.path}\`;
         fileLink.className = 'file-item file';
         fileLink.innerHTML = \`
-          <span class="file-name">📄 \${item.name}</span>
+          <span class="file-name">\${item.name}</span>
         \`;
         li.appendChild(fileLink);
       }
